@@ -1,4 +1,4 @@
-# deborgen
+# deborgen // compute with friends
 
 **deborgen** is a small distributed compute cooperative for friends who want to build and run things together.
 
