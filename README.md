@@ -4,7 +4,7 @@
 
 It connects personal machines — gaming PCs, laptops, workstations — into a shared job system so that idle compute can be pooled for modeling, optimization, simulation, and experimentation. Instead of renting cloud resources, a group can coordinate what they already have.
 
-deborgen is intentionally lightweight. It is not a production orchestrator or a hyperscale cluster. It is a structured way for friends to share compute responsibly, transparently, and with clear rules.
+deborgen is intentionally lightweight. It provides a structured way for friends to share compute responsibly, transparently, and with clear rules without introducing production-orchestrator complexity.
 
 ## Why
 
@@ -14,7 +14,7 @@ At the same time, most personal machines sit idle for large parts of the day.
 
 deborgen exists to explore a simple idea: what if a small, trusted group pooled their machines during agreed hours and used them intentionally?
 
-The goal is not maximum performance. The goal is shared capability.
+The primary goal is shared capability rather than maximum performance.
 
 ## What It Is
 
@@ -30,7 +30,7 @@ Jobs are transparent. Each job records who submitted it, where it ran, when it s
 
 Participation is voluntary. Nodes may join or leave at any time. Execution windows can be limited to agreed work hours. Jobs are time-bounded and resource-limited.
 
-The system assumes a trusted group. It is not adversarially hardened. Instead, it emphasizes shared norms:
+The system assumes a trusted group and emphasizes shared norms:
 
 * transparency
 * explicit rules
@@ -55,6 +55,6 @@ This is enough to coordinate real work across multiple personal machines while k
 
 deborgen is both a practical tool and a shared experiment.
 
-It is a way to explore distributed systems at a human scale. It is a way to study scheduling and allocation in a real environment. And it is a way to build things together using the resources already in the room.
+It explores distributed systems at a human scale, studies scheduling and allocation in a real environment, and helps people build together using the resources already in the room.
 
 The system will grow only as needed.
