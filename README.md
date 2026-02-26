@@ -32,10 +32,10 @@ Participation is voluntary. Nodes may join or leave at any time. Execution windo
 
 The system assumes a trusted group and emphasizes shared norms:
 
-* transparency
-* explicit rules
-* opt-in participation
-* shared benefit
+- transparency
+- explicit rules
+- opt-in participation
+- shared benefit
 
 When someone needs extra compute for a project, the cooperative makes it available. When they contribute a machine, they increase the group’s collective capacity.
 
@@ -43,13 +43,29 @@ When someone needs extra compute for a project, the cooperative makes it availab
 
 The first version of deborgen provides a minimal but complete loop:
 
-* submit a job
-* a remote machine runs it
-* logs are recorded
-* artifacts are stored
-* the job history is visible
+- submit a job
+- a remote machine runs it
+- logs are recorded
+- artifacts are stored
+- the job history is visible
 
 This is enough to coordinate real work across multiple personal machines while keeping the system understandable.
+
+## Quickstart (v0)
+
+Run the minimal cross-machine loop:
+
+- submit a job
+- worker claims and executes
+- logs are recorded
+- job reaches a terminal state
+
+Start here: [`quickstart.md`](./quickstart.md)
+
+Then use:
+
+- [`architecture.md`](./architecture.md) for system model and state transitions
+- [`api.md`](./api.md) for HTTP contract details
 
 ## Intent
 
