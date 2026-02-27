@@ -39,7 +39,7 @@ From project root:
 
 ```bash
 uv sync
-uv run uvicorn deborgen.coordinator.app:app --host 0.0.0.0 --port 8000
+uv run deborgen-coordinator
 ```
 
 Health check:
@@ -60,12 +60,12 @@ On a second machine:
 
 ```bash
 uv sync
-uv run python -m deborgen.worker.agent --coordinator http://<coordinator-tailscale-ip>:8000 --node-id node-1
+uv run deborgen-worker --coordinator http://<coordinator-tailscale-ip>:8000 --node-id node-1
 ```
 
 Worker behavior: heartbeat and polling for available jobs.
 
-Important: the worker module is `deborgen.worker.agent`, not `deborgen.worker`.
+Important: the worker implementation lives in `deborgen.worker.agent`, not `deborgen.worker`.
 
 If the worker appears idle after startup, that is usually expected. It stays in a poll loop until jobs are available.
 

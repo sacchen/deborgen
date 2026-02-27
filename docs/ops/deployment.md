@@ -8,6 +8,11 @@ Related docs:
 - [`architecture.md`](../../architecture.md)
 - [`api.md`](../../api.md)
 
+Checked-in templates:
+
+- [`ops/systemd/deborgen-coordinator.service`](../../ops/systemd/deborgen-coordinator.service)
+- [`ops/env/coordinator.env.example`](../../ops/env/coordinator.env.example)
+
 ## Topology
 
 - Coordinator runs on a remote Linux host.
@@ -23,16 +28,14 @@ Run the coordinator under `systemd` so it survives shell disconnects and reboots
 Service command:
 
 ```bash
-uv run uvicorn deborgen.coordinator.app:app --host 0.0.0.0 --port 8000
+uv run deborgen-coordinator
 ```
 
-Service file:
+Use the checked-in service template at [`ops/systemd/deborgen-coordinator.service`](../../ops/systemd/deborgen-coordinator.service), then install it as `/etc/systemd/system/deborgen-coordinator.service`.
 
-- `/etc/systemd/system/deborgen-coordinator.service`
+Use the checked-in env template at [`ops/env/coordinator.env.example`](../../ops/env/coordinator.env.example), then install it as `/etc/deborgen/coordinator.env`.
 
-Environment file:
-
-- `/etc/deborgen/coordinator.env`
+Before installing the service file, replace `User`, `WorkingDirectory`, and the `uv` path placeholders for the target host.
 
 Environment keys:
 
@@ -47,6 +50,7 @@ Useful commands:
 sudo systemctl status deborgen-coordinator
 sudo systemctl restart deborgen-coordinator
 sudo journalctl -u deborgen-coordinator -f
+sudo systemctl enable --now deborgen-coordinator
 ```
 
 ## Worker Startup
@@ -54,10 +58,10 @@ sudo journalctl -u deborgen-coordinator -f
 Start the worker with:
 
 ```bash
-uv run python -m deborgen.worker.agent --coordinator http://<coordinator-tailscale-ip>:8000 --node-id node-1
+uv run deborgen-worker --coordinator http://<coordinator-tailscale-ip>:8000 --node-id node-1
 ```
 
-The worker entrypoint is `deborgen.worker.agent`, not `deborgen.worker`.
+The worker implementation lives in `deborgen.worker.agent`.
 
 When the worker is healthy but idle, it may look like it is hanging. This is expected because it stays in its poll loop waiting for work.
 

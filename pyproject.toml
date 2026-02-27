@@ -12,6 +12,10 @@ dependencies = [
     "pydantic>=2.6",
 ]
 
+[project.scripts]
+deborgen-coordinator = "deborgen.coordinator.app:main"
+deborgen-worker = "deborgen.worker.agent:main"
+
 [project.optional-dependencies]
 dev = [
     "ruff>=0.3",
