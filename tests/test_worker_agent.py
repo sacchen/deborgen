@@ -16,6 +16,11 @@ def test_parse_labels_rejects_non_object() -> None:
         parse_labels('["not", "an", "object"]')
 
 
+def test_parse_labels_rejects_nested_values() -> None:
+    with pytest.raises(ValueError, match="must be str/int/float/bool"):
+        parse_labels('{"nested": {"key": "value"}}')
+
+
 def test_run_job_captures_output_and_exit_code() -> None:
     exit_code, text, failure_reason = run_job("python -c \"print('ok')\"", timeout_seconds=5)
     assert exit_code == 0
