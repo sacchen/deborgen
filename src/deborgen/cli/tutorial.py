@@ -75,6 +75,7 @@ def main() -> None:
     print(f"- submit one example: uv run deborgen-submit-example hello --coordinator {coordinator}")
     print(f"- submit one example: uv run deborgen-submit-example primes --coordinator {coordinator}")
     print(f"- watch a job: uv run deborgen-watch-job <job_id> --coordinator {coordinator}")
+    print(f"- inspect one job: uv run deborgen-get-job <job_id> --coordinator {coordinator}")
     print(f"- list recent jobs: uv run deborgen-list-jobs --coordinator {coordinator}")
     print("")
     print("tutorial complete")
