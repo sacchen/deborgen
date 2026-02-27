@@ -10,6 +10,7 @@ Related docs:
 
 - [`architecture.md`](./architecture.md)
 - [`api.md`](./api.md)
+- [`docs/ops/deployment.md`](./docs/ops/deployment.md)
 
 ## Prerequisites
 
@@ -29,6 +30,8 @@ Set a token for authenticated API calls:
 ```bash
 export DEBORGEN_TOKEN="<shared-token>"
 ```
+
+For persistent deployments, prefer storing the coordinator token in a root-owned environment file and loading the client-side token at runtime instead of hard-coding it in shell startup files. See [`docs/ops/deployment.md`](./docs/ops/deployment.md).
 
 ## 1. Start Coordinator
 
@@ -61,6 +64,10 @@ uv run python -m deborgen.worker.agent --coordinator http://<coordinator-tailsca
 ```
 
 Worker behavior: heartbeat and polling for available jobs.
+
+Important: the worker module is `deborgen.worker.agent`, not `deborgen.worker`.
+
+If the worker appears idle after startup, that is usually expected. It stays in a poll loop until jobs are available.
 
 ## 3. Submit Job
 
@@ -116,3 +123,5 @@ curl http://<coordinator-tailscale-ip>:8000/jobs/<job_id>/logs \
 - add containerized execution
 - add lease heartbeats and expiry handling
 - add conservative infra retry policy
+
+For the validated `systemd` deployment shape, secret handling, SSH hardening, and recovery checklist, use [`docs/ops/deployment.md`](./docs/ops/deployment.md).
