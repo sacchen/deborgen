@@ -57,6 +57,30 @@ def build_job_request(example: str, timeout_seconds: int, max_attempts: int) -> 
     }
 
 
+def submit_example_job(
+    *,
+    coordinator: str,
+    example: str,
+    token: str | None,
+    timeout_seconds: int,
+    max_attempts: int,
+) -> tuple[str, dict[str, Any]]:
+    headers = build_headers(token)
+    payload = build_job_request(
+        example=example,
+        timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
+    )
+
+    with httpx.Client(headers=headers, timeout=30.0) as client:
+        response = client.post(f"{coordinator}/jobs", json=payload)
+        response.raise_for_status()
+
+    job = response.json()
+    job_id = str(job["id"])
+    return job_id, payload
+
+
 def print_follow_up(job_id: str, coordinator: str, token: str | None) -> None:
     print(f"submitted {job_id}")
     watch_cmd = f"uv run deborgen-watch-job {job_id} --coordinator {coordinator}"
@@ -68,19 +92,13 @@ def print_follow_up(job_id: str, coordinator: str, token: str | None) -> None:
 def main() -> None:
     args = parse_args()
     coordinator = args.coordinator.rstrip("/")
-    headers = build_headers(args.token)
-    payload = build_job_request(
+    job_id, payload = submit_example_job(
+        coordinator=coordinator,
         example=args.example,
+        token=args.token,
         timeout_seconds=args.timeout_seconds,
         max_attempts=args.max_attempts,
     )
-
-    with httpx.Client(headers=headers, timeout=30.0) as client:
-        response = client.post(f"{coordinator}/jobs", json=payload)
-        response.raise_for_status()
-
-    job = response.json()
-    job_id = str(job["id"])
     print(f"example={args.example}")
     print(f"command={payload['command']}")
     print_follow_up(job_id=job_id, coordinator=coordinator, token=args.token)

@@ -34,3 +34,9 @@ def test_watch_job_cli_help() -> None:
     result = run_help("deborgen-watch-job")
     assert result.returncode == 0
     assert "Watch a deborgen job until it reaches a terminal state" in result.stdout
+
+
+def test_tutorial_cli_help() -> None:
+    result = run_help("deborgen-tutorial")
+    assert result.returncode == 0
+    assert "Run the deborgen onboarding tutorial sequence" in result.stdout

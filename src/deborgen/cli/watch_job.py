@@ -54,25 +54,31 @@ def format_summary(job: dict[str, object]) -> str:
     return f"job={job['id']} status={status} node={node} exit_code={exit_code}"
 
 
-def main() -> None:
-    args = parse_args()
-    coordinator = args.coordinator.rstrip("/")
-    deadline = time.monotonic() + args.timeout_seconds
-    headers = build_headers(args.token)
+def watch_job(
+    *,
+    coordinator: str,
+    job_id: str,
+    token: str | None,
+    poll_seconds: float,
+    timeout_seconds: float,
+    include_logs: bool,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    headers = build_headers(token)
 
     with httpx.Client(headers=headers, timeout=30.0) as client:
         while True:
-            response = client.get(f"{coordinator}/jobs/{args.job_id}")
+            response = client.get(f"{coordinator}/jobs/{job_id}")
             response.raise_for_status()
             job: dict[str, object] = response.json()
             print(format_summary(job))
 
             status = str(job["status"])
             if status in TERMINAL_STATES:
-                if args.no_logs:
+                if not include_logs:
                     return
 
-                logs_response = client.get(f"{coordinator}/jobs/{args.job_id}/logs")
+                logs_response = client.get(f"{coordinator}/jobs/{job_id}/logs")
                 logs_response.raise_for_status()
                 logs = logs_response.json()["text"]
                 if logs:
@@ -82,6 +88,19 @@ def main() -> None:
                 return
 
             if time.monotonic() >= deadline:
-                raise SystemExit(f"timed out waiting for {args.job_id}")
+                raise SystemExit(f"timed out waiting for {job_id}")
 
-            time.sleep(args.poll_seconds)
+            time.sleep(poll_seconds)
+
+
+def main() -> None:
+    args = parse_args()
+    coordinator = args.coordinator.rstrip("/")
+    watch_job(
+        coordinator=coordinator,
+        job_id=args.job_id,
+        token=args.token,
+        poll_seconds=args.poll_seconds,
+        timeout_seconds=args.timeout_seconds,
+        include_logs=not args.no_logs,
+    )

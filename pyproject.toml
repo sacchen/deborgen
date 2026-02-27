@@ -15,6 +15,7 @@ dependencies = [
 [project.scripts]
 deborgen-coordinator = "deborgen.coordinator.app:main"
 deborgen-submit-example = "deborgen.cli.submit_example:main"
+deborgen-tutorial = "deborgen.cli.tutorial:main"
 deborgen-watch-job = "deborgen.cli.watch_job:main"
 deborgen-worker = "deborgen.worker.agent:main"
 

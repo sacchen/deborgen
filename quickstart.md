@@ -53,6 +53,17 @@ export DEBORGEN_TOKEN="<shared-token>"
 
 For persistent deployments, prefer storing the coordinator token in a root-owned environment file and loading the client-side token at runtime instead of hard-coding it in shell startup files. See [`docs/ops/deployment.md`](./docs/ops/deployment.md).
 
+## Fastest Path
+
+If you want the quickest first run from your local machine after the coordinator and worker are up, use:
+
+```bash
+uv run deborgen-tutorial \
+  --coordinator http://<coordinator-tailscale-ip>:8000
+```
+
+That command submits the `hello` example, waits for it to finish, prints logs, then does the same for the `primes` example.
+
 ## 1. Start Coordinator
 
 On the droplet, from the project root:
