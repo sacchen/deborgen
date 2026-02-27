@@ -62,7 +62,7 @@ uv run deborgen-tutorial \
   --coordinator http://<coordinator-tailscale-ip>:8000
 ```
 
-That command submits the `hello` example, waits for it to finish, prints logs, then does the same for the `primes` example.
+That command submits the `hello` example, waits for it to finish, prints logs, then does the same for the `pi` example.
 
 ## 1. Start Coordinator
 
@@ -140,17 +140,22 @@ Expected log output includes the worker hostname and working directory. That pro
 Once the first example works, submit a small compute task:
 
 ```bash
-uv run deborgen-submit-example primes \
+uv run deborgen-submit-example pi \
   --coordinator http://<coordinator-tailscale-ip>:8000
 ```
 
-This job counts prime numbers and reports:
+This job runs a Monte Carlo estimate of pi and reports:
 
-- how many primes it found
-- the largest prime in range
+- how many samples it used
+- how many points landed inside the circle
+- the estimated value of pi
+- the absolute error versus the real value of pi
+- a tiny terminal-friendly accuracy bar
 - how long the computation took
 
-The point is to show the obvious next step after “proof of execution”: use the same loop to run a real piece of compute work and get a useful result back quickly.
+The point is to show the obvious next step after “proof of execution”: use the same loop to run one meaningful simulation job and get a useful result back quickly.
+
+This also hints at why multiple workers matter later: the same Monte Carlo experiment can be split into many independent jobs with different random seeds.
 
 Use the watch command printed by the submit helper for this second job too.
 

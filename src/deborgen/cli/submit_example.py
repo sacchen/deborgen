@@ -8,7 +8,7 @@ import httpx
 
 EXAMPLE_COMMANDS: dict[str, str] = {
     "hello": "uv run python examples/01_hello_worker.py",
-    "primes": "uv run python examples/02_count_primes.py",
+    "pi": "uv run python examples/02_monte_carlo_pi.py",
 }
 
 
