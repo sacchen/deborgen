@@ -5,7 +5,7 @@ import os
 import secrets
 import sqlite3
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
@@ -29,6 +29,9 @@ def parse_iso(value: str | None) -> datetime | None:
     if value is None:
         return None
     return datetime.fromisoformat(value)
+
+
+LEASE_DURATION = timedelta(seconds=300)
 
 
 def parse_job_pk(job_id: str) -> int:
@@ -262,6 +265,7 @@ class SqliteJobStore:
                 return None
 
             lease_token = secrets.token_urlsafe(24)
+            lease_expires_at = to_iso(utcnow() + LEASE_DURATION)
             self._conn.execute(
                 """
                 INSERT INTO leases(job_id, node_id, lease_token, lease_expires_at)
@@ -271,7 +275,7 @@ class SqliteJobStore:
                     lease_token = excluded.lease_token,
                     lease_expires_at = excluded.lease_expires_at
                 """,
-                (job_pk, node_id, lease_token, now),
+                (job_pk, node_id, lease_token, lease_expires_at),
             )
 
             row = self._get_job_row(job_pk)
@@ -291,7 +295,7 @@ class SqliteJobStore:
                 raise HTTPException(status_code=409, detail="job is not running")
 
             lease = self._conn.execute(
-                "SELECT node_id, lease_token FROM leases WHERE job_id = ?",
+                "SELECT node_id, lease_token, lease_expires_at FROM leases WHERE job_id = ?",
                 (job_pk,),
             ).fetchone()
             if lease is None:
@@ -301,6 +305,10 @@ class SqliteJobStore:
             lease_token = cast(str, lease["lease_token"])
             if lease_node_id != request.node_id or lease_token != request.lease_token:
                 raise HTTPException(status_code=409, detail="job is owned by a different worker")
+            lease_expires_at = parse_iso(cast(str, lease["lease_expires_at"]))
+            assert lease_expires_at is not None
+            if utcnow() > lease_expires_at:
+                raise HTTPException(status_code=409, detail="lease has expired")
 
             next_status: JobStatus = "succeeded" if request.exit_code == 0 else "failed"
             self._conn.execute(
@@ -327,7 +335,7 @@ class SqliteJobStore:
             if row is None:
                 raise HTTPException(status_code=404, detail="job not found")
             lease = self._conn.execute(
-                "SELECT node_id, lease_token FROM leases WHERE job_id = ?",
+                "SELECT node_id, lease_token, lease_expires_at FROM leases WHERE job_id = ?",
                 (job_pk,),
             ).fetchone()
             if lease is None:
@@ -336,6 +344,10 @@ class SqliteJobStore:
             lease_token = cast(str, lease["lease_token"])
             if lease_node_id != request.node_id or lease_token != request.lease_token:
                 raise HTTPException(status_code=409, detail="job is owned by a different worker")
+            lease_expires_at = parse_iso(cast(str, lease["lease_expires_at"]))
+            assert lease_expires_at is not None
+            if utcnow() > lease_expires_at:
+                raise HTTPException(status_code=409, detail="lease has expired")
 
             self._conn.execute(
                 "INSERT INTO logs(job_id, text, created_at) VALUES (?, ?, ?)",
