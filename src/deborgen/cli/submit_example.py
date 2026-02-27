@@ -81,10 +81,10 @@ def submit_example_job(
     return job_id, payload
 
 
-def print_follow_up(job_id: str, coordinator: str, token: str | None) -> None:
+def print_follow_up(job_id: str, coordinator: str, token_from_env: bool) -> None:
     print(f"submitted {job_id}")
     watch_cmd = f"uv run deborgen-watch-job {job_id} --coordinator {coordinator}"
-    if token:
+    if token_from_env:
         watch_cmd += " --token \"$DEBORGEN_TOKEN\""
     print(f"watch: {watch_cmd}")
 
@@ -92,6 +92,7 @@ def print_follow_up(job_id: str, coordinator: str, token: str | None) -> None:
 def main() -> None:
     args = parse_args()
     coordinator = args.coordinator.rstrip("/")
+    env_token = os.getenv("DEBORGEN_TOKEN")
     job_id, payload = submit_example_job(
         coordinator=coordinator,
         example=args.example,
@@ -101,4 +102,8 @@ def main() -> None:
     )
     print(f"example={args.example}")
     print(f"command={payload['command']}")
-    print_follow_up(job_id=job_id, coordinator=coordinator, token=args.token)
+    print_follow_up(
+        job_id=job_id,
+        coordinator=coordinator,
+        token_from_env=bool(args.token) and args.token == env_token,
+    )

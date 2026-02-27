@@ -7,6 +7,13 @@ from typing import Any
 import httpx
 
 
+def parse_limit(value: str) -> int:
+    limit = int(value)
+    if limit < 1 or limit > 1000:
+        raise argparse.ArgumentTypeError("--limit must be between 1 and 1000")
+    return limit
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="List recent deborgen jobs",
@@ -25,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--limit",
-        type=int,
+        type=parse_limit,
         default=10,
         help="Maximum number of jobs to list",
     )

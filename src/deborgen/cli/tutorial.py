@@ -33,7 +33,13 @@ def parse_args() -> argparse.Namespace:
         "--timeout-seconds",
         type=float,
         default=60.0,
-        help="Per-job timeout while waiting for completion",
+        help="Per-job wait timeout while watching for completion",
+    )
+    parser.add_argument(
+        "--job-timeout-seconds",
+        type=int,
+        default=3600,
+        help="Job timeout sent to the coordinator for submitted tutorial jobs",
     )
     return parser.parse_args()
 
@@ -52,7 +58,7 @@ def main() -> None:
             coordinator=coordinator,
             example=example,
             token=args.token,
-            timeout_seconds=int(args.timeout_seconds),
+            timeout_seconds=args.job_timeout_seconds,
             max_attempts=1,
         )
         print(f"submitted {job_id}")
