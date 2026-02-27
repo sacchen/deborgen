@@ -267,6 +267,8 @@ class SqliteJobStore:
                 return None
 
             lease_token = secrets.token_urlsafe(24)
+            lease_expires_at = to_iso(claimed_at + self._lease_duration)
+            assert lease_expires_at is not None
             self._conn.execute(
                 """
                 INSERT INTO leases(job_id, node_id, lease_token, lease_expires_at)
