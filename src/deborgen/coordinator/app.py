@@ -5,7 +5,7 @@ import os
 import secrets
 import sqlite3
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
@@ -101,10 +101,13 @@ class NodeHeartbeatRequest(BaseModel):
 
 
 class SqliteJobStore:
-    def __init__(self, db_path: str) -> None:
+    def __init__(self, db_path: str, lease_duration_seconds: int = 30) -> None:
         self._lock = threading.Lock()
+        self._lease_duration = timedelta(seconds=lease_duration_seconds)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # Required for ON DELETE CASCADE and other FK behavior in SQLite.
+        self._conn.execute("PRAGMA foreign_keys = ON")
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -235,8 +238,10 @@ class SqliteJobStore:
             return self._row_to_job(row)
 
     def claim_next_job(self, node_id: str) -> JobAssignment | None:
-        now = to_iso(utcnow())
-        assert now is not None
+        claimed_at = utcnow()
+        now = to_iso(claimed_at)
+        lease_expires_at = to_iso(claimed_at + self._lease_duration)
+        assert now is not None and lease_expires_at is not None
         with self._lock, self._conn:
             queued = self._conn.execute(
                 """
@@ -271,7 +276,7 @@ class SqliteJobStore:
                     lease_token = excluded.lease_token,
                     lease_expires_at = excluded.lease_expires_at
                 """,
-                (job_pk, node_id, lease_token, now),
+                (job_pk, node_id, lease_token, lease_expires_at),
             )
 
             row = self._get_job_row(job_pk)
@@ -291,7 +296,7 @@ class SqliteJobStore:
                 raise HTTPException(status_code=409, detail="job is not running")
 
             lease = self._conn.execute(
-                "SELECT node_id, lease_token FROM leases WHERE job_id = ?",
+                "SELECT node_id, lease_token, lease_expires_at FROM leases WHERE job_id = ?",
                 (job_pk,),
             ).fetchone()
             if lease is None:
@@ -299,8 +304,13 @@ class SqliteJobStore:
 
             lease_node_id = cast(str, lease["node_id"])
             lease_token = cast(str, lease["lease_token"])
+            lease_expires_at = parse_iso(cast(str, lease["lease_expires_at"]))
             if lease_node_id != request.node_id or lease_token != request.lease_token:
                 raise HTTPException(status_code=409, detail="job is owned by a different worker")
+            if lease_expires_at is None:
+                raise HTTPException(status_code=409, detail="job has no active lease")
+            if utcnow() > lease_expires_at:
+                raise HTTPException(status_code=409, detail="lease has expired")
 
             next_status: JobStatus = "succeeded" if request.exit_code == 0 else "failed"
             self._conn.execute(
@@ -327,15 +337,20 @@ class SqliteJobStore:
             if row is None:
                 raise HTTPException(status_code=404, detail="job not found")
             lease = self._conn.execute(
-                "SELECT node_id, lease_token FROM leases WHERE job_id = ?",
+                "SELECT node_id, lease_token, lease_expires_at FROM leases WHERE job_id = ?",
                 (job_pk,),
             ).fetchone()
             if lease is None:
                 raise HTTPException(status_code=409, detail="job has no active lease")
             lease_node_id = cast(str, lease["node_id"])
             lease_token = cast(str, lease["lease_token"])
+            lease_expires_at = parse_iso(cast(str, lease["lease_expires_at"]))
             if lease_node_id != request.node_id or lease_token != request.lease_token:
                 raise HTTPException(status_code=409, detail="job is owned by a different worker")
+            if lease_expires_at is None:
+                raise HTTPException(status_code=409, detail="job has no active lease")
+            if utcnow() > lease_expires_at:
+                raise HTTPException(status_code=409, detail="lease has expired")
 
             self._conn.execute(
                 "INSERT INTO logs(job_id, text, created_at) VALUES (?, ?, ?)",
@@ -411,12 +426,12 @@ def require_auth(
         )
 
 
-def create_app(db_path: str | None = None) -> FastAPI:
+def create_app(db_path: str | None = None, lease_duration_seconds: int = 30) -> FastAPI:
     app = FastAPI(title="deborgen")
     resolved_db_path: str = (
         db_path if db_path is not None else os.getenv("DEBORGEN_DB_PATH") or "deborgen.db"
     )
-    store = SqliteJobStore(db_path=resolved_db_path)
+    store = SqliteJobStore(db_path=resolved_db_path, lease_duration_seconds=lease_duration_seconds)
 
     @app.get("/health")
     def health() -> dict[str, str]:
