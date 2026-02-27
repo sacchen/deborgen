@@ -60,7 +60,10 @@ On a second machine:
 
 ```bash
 uv sync
-uv run deborgen-worker --coordinator http://<coordinator-tailscale-ip>:8000 --node-id node-1
+uv run deborgen-worker \
+  --coordinator http://<coordinator-tailscale-ip>:8000 \
+  --node-id node-1 \
+  --work-dir /absolute/path/for/job-runs
 ```
 
 Worker behavior: heartbeat and polling for available jobs.
@@ -68,6 +71,8 @@ Worker behavior: heartbeat and polling for available jobs.
 Important: the worker implementation lives in `deborgen.worker.agent`, not `deborgen.worker`.
 
 If the worker appears idle after startup, that is usually expected. It stays in a poll loop until jobs are available.
+
+The worker executes commands without a shell. Commands must therefore be valid executable invocations, not shell pipelines or compound shell expressions.
 
 ## 3. Submit Job
 

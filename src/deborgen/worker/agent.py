@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import subprocess
 import time
 from typing import Any
@@ -24,6 +25,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--token", default=None, help="Bearer token")
     parser.add_argument("--poll-seconds", type=float, default=2.0, help="Poll interval when queue is empty")
     parser.add_argument(
+        "--work-dir",
+        default=None,
+        help="Optional working directory for executed jobs",
+    )
+    parser.add_argument(
         "--heartbeat-seconds",
         type=float,
         default=15.0,
@@ -32,18 +38,32 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_job(command: str, timeout_seconds: int) -> tuple[int, str, str | None]:
+def run_job(
+    command: str,
+    timeout_seconds: int,
+    work_dir: str | None = None,
+) -> tuple[int, str, str | None]:
+    try:
+        argv = shlex.split(command)
+    except ValueError as exc:
+        return 2, "", f"invalid command: {exc}"
+
+    if not argv:
+        return 2, "", "invalid command: empty command"
+
     try:
         completed = subprocess.run(
-            command,
-            shell=True,
+            argv,
             check=False,
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
+            cwd=work_dir,
         )
         text = (completed.stdout or "") + (completed.stderr or "")
         return completed.returncode, text, None
+    except FileNotFoundError:
+        return 127, "", f"command not found: {argv[0]}"
     except subprocess.TimeoutExpired as exc:
         stdout = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
         stderr = exc.stderr.decode() if isinstance(exc.stderr, bytes) else (exc.stderr or "")
@@ -85,6 +105,7 @@ def worker_loop(
     labels: dict[str, LabelValue],
     token: str | None,
     poll_seconds: float,
+    work_dir: str | None,
     heartbeat_seconds: float,
 ) -> None:
     headers: dict[str, str] = {}
@@ -127,7 +148,11 @@ def worker_loop(
             timeout_seconds = int(job.get("timeout_seconds", 3600))
             print(f"[worker] running {job_id}: {command}")
 
-            exit_code, log_text, failure_reason = run_job(command=command, timeout_seconds=timeout_seconds)
+            exit_code, log_text, failure_reason = run_job(
+                command=command,
+                timeout_seconds=timeout_seconds,
+                work_dir=work_dir,
+            )
 
             if log_text:
                 try:
@@ -167,6 +192,7 @@ def main() -> None:
         labels=labels,
         token=args.token,
         poll_seconds=args.poll_seconds,
+        work_dir=args.work_dir,
         heartbeat_seconds=args.heartbeat_seconds,
     )
 

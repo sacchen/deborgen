@@ -58,12 +58,17 @@ sudo systemctl enable --now deborgen-coordinator
 Start the worker with:
 
 ```bash
-uv run deborgen-worker --coordinator http://<coordinator-tailscale-ip>:8000 --node-id node-1
+uv run deborgen-worker \
+  --coordinator http://<coordinator-tailscale-ip>:8000 \
+  --node-id node-1 \
+  --work-dir /absolute/path/for/job-runs
 ```
 
 The worker implementation lives in `deborgen.worker.agent`.
 
 When the worker is healthy but idle, it may look like it is hanging. This is expected because it stays in its poll loop waiting for work.
+
+The worker executes commands without a shell. Job commands must be valid executable invocations, not shell pipelines or compound shell expressions.
 
 ## Secrets
 
