@@ -1,8 +1,11 @@
 # Quickstart (v0)
 
-This guide covers the minimal setup to run one remote job:
+This guide is a guided first run for the simplest useful setup:
 
-submit job -> worker runs it -> logs are recorded -> job completes.
+- local machine = submitter
+- droplet = coordinator + first worker
+
+The goal is to get to a first result quickly, then run one small practical compute job.
 
 This quickstart follows the v0 contract in [`api.md`](./api.md). It is contract-first: depending on current implementation status, some endpoints may still be in progress.
 
@@ -12,20 +15,35 @@ Related docs:
 - [`api.md`](./api.md)
 - [`docs/ops/deployment.md`](./docs/ops/deployment.md)
 
+## Mental Model
+
+The coordinator does not execute jobs by itself. It only stores state and exposes the API.
+
+A worker is the machine running the `deborgen-worker` process. Jobs run on whichever worker claims them.
+
+- If the droplet is only running the coordinator, jobs do not run on the droplet.
+- If the droplet is running both the coordinator and a worker, jobs can run on the droplet.
+- If your laptop submits a job, that still does not mean the job runs on the laptop. It runs on the worker that claims it.
+
+In this tutorial, the droplet is both the coordinator and the first worker. Your local machine only submits jobs and reads results.
+
 ## Prerequisites
 
-On coordinator and worker machines:
+On the droplet:
 
 - Python 3.11+
 - `uv` installed
 - Tailscale installed and connected
-
-On the coordinator host:
-
 - repository cloned
 - dependencies installed with `uv sync`
 
-Set a token for authenticated API calls:
+On your local machine:
+
+- `curl`
+- network access to the coordinator over Tailscale
+- the same `DEBORGEN_TOKEN` used by the coordinator
+
+Set the shared token for authenticated API calls:
 
 ```bash
 export DEBORGEN_TOKEN="<shared-token>"
@@ -35,12 +53,14 @@ For persistent deployments, prefer storing the coordinator token in a root-owned
 
 ## 1. Start Coordinator
 
-From project root:
+On the droplet, from the project root:
 
 ```bash
 uv sync
 uv run deborgen-coordinator
 ```
+
+Keep this process running. Leave it in its own SSH session or terminal window.
 
 Health check:
 
@@ -56,7 +76,7 @@ Expected response:
 
 ## 2. Start Worker
 
-On a second machine:
+In a second SSH session on the droplet, start a worker too:
 
 ```bash
 uv sync
@@ -74,18 +94,22 @@ If the worker appears idle after startup, that is usually expected. It stays in 
 
 The worker executes commands without a shell. Commands must therefore be valid executable invocations, not shell pipelines or compound shell expressions.
 
-## 3. Submit Job
+Because the worker is running on the droplet in this tutorial, any job it claims will execute on the droplet.
 
-From any machine that can reach the coordinator:
+## 3. First Result: Prove Where The Job Runs
+
+From your local machine:
 
 ```bash
 curl -X POST http://<coordinator-tailscale-ip>:8000/jobs \
   -H "Authorization: Bearer $DEBORGEN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"command":"uv run python examples/demo.py"}'
+  -d '{"command":"uv run python examples/01_hello_worker.py"}'
 ```
 
-Expected flow: job enters `queued`, then a worker claims and runs it.
+Expected flow: the job enters `queued`, the droplet worker claims it, and the script runs on the droplet.
+
+The submit response includes a job id such as `job_1`. Keep that id for the next two steps.
 
 ## 4. Check Status
 
@@ -116,17 +140,53 @@ curl http://<coordinator-tailscale-ip>:8000/jobs/<job_id>/logs \
   -H "Authorization: Bearer $DEBORGEN_TOKEN"
 ```
 
+Expected log output includes the worker hostname and working directory. That proves the command ran on the droplet rather than on your local machine.
+
+## 6. Practical Compute: Run A Small Real Job
+
+Once the first example works, submit a small compute task:
+
+```bash
+curl -X POST http://<coordinator-tailscale-ip>:8000/jobs \
+  -H "Authorization: Bearer $DEBORGEN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"uv run python examples/02_count_primes.py"}'
+```
+
+This job counts prime numbers and reports:
+
+- how many primes it found
+- the largest prime in range
+- how long the computation took
+
+The point is to show the obvious next step after “proof of execution”: use the same loop to run a real piece of compute work and get a useful result back quickly.
+
+Use the returned job id from this second submission with the same status and log commands from Steps 4 and 5.
+
+## Adding More Workers Later
+
+Once the droplet is working as coordinator + first worker, add more workers from other machines:
+
+- keep the droplet coordinator running
+- start `deborgen-worker` on a gaming PC
+- point that worker at the same coordinator URL
+- submit jobs from the same local machine
+
+At that point, jobs will run on whichever worker claims them first.
+
 ## What This Demonstrates
 
+- local submitter / remote worker mental model
 - pull-based worker execution
 - centralized coordinator state
 - basic audit trail via status and logs
+- a path from first proof to small practical compute
 
 ## Next Steps
 
-- add persistent storage
-- add containerized execution
-- add lease heartbeats and expiry handling
-- add conservative infra retry policy
+- add more workers
+- add containerized execution on workers
+- add artifact storage and retrieval
+- add stronger execution isolation
 
 For the validated `systemd` deployment shape, secret handling, SSH hardening, and recovery checklist, use [`docs/ops/deployment.md`](./docs/ops/deployment.md).

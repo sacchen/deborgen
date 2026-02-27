@@ -16,10 +16,20 @@ Checked-in templates:
 ## Topology
 
 - Coordinator runs on a remote Linux host.
-- Worker and submitter can run from a laptop or another trusted machine.
+- The same host can also run a worker.
+- A submitter can run from a laptop or another trusted machine.
 - Connectivity is over Tailscale.
 
 Use `http://<coordinator-tailscale-ip>:8000` as the coordinator URL in the examples below.
+
+The simplest practical setup is:
+
+- local machine = submitter
+- droplet = coordinator + first worker
+
+This keeps the coordinator private while still giving you one remote machine that actually executes jobs.
+
+A worker is the machine running the `deborgen-worker` process. In later phases, that worker may launch jobs inside containers, but today it runs the job command directly on the worker host.
 
 ## Coordinator Service
 
@@ -69,6 +79,8 @@ The worker implementation lives in `deborgen.worker.agent`.
 When the worker is healthy but idle, it may look like it is hanging. This is expected because it stays in its poll loop waiting for work.
 
 The worker executes commands without a shell. Job commands must be valid executable invocations, not shell pipelines or compound shell expressions.
+
+If you start the worker on the droplet, jobs claimed by that worker run on the droplet. If you later start workers on gaming PCs, jobs will run on whichever worker claims them.
 
 ## Secrets
 
