@@ -8,6 +8,8 @@ from typing import Any
 
 import httpx
 
+LabelValue = str | int | float | bool
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="deborgen v0 worker agent")
@@ -49,14 +51,24 @@ def run_job(command: str, timeout_seconds: int) -> tuple[int, str, str | None]:
         return 124, output, f"timeout exceeded ({timeout_seconds}s)"
 
 
-def parse_labels(labels_json: str) -> dict[str, Any]:
+def parse_labels(labels_json: str) -> dict[str, LabelValue]:
     parsed = json.loads(labels_json)
     if not isinstance(parsed, dict):
         raise ValueError("--labels-json must decode to an object")
-    return parsed
+
+    labels: dict[str, LabelValue] = {}
+    for key, value in parsed.items():
+        if not isinstance(key, str):
+            raise ValueError("--labels-json keys must be strings")
+        if not isinstance(value, (str, int, float, bool)):
+            raise ValueError(
+                f"--labels-json value for '{key}' must be str/int/float/bool"
+            )
+        labels[key] = value
+    return labels
 
 
-def send_heartbeat(client: httpx.Client, node_id: str, name: str | None, labels: dict[str, Any]) -> None:
+def send_heartbeat(client: httpx.Client, node_id: str, name: str | None, labels: dict[str, LabelValue]) -> None:
     client.post(
         f"/nodes/{node_id}/heartbeat",
         json={
@@ -70,7 +82,7 @@ def worker_loop(
     coordinator: str,
     node_id: str,
     name: str | None,
-    labels: dict[str, Any],
+    labels: dict[str, LabelValue],
     token: str | None,
     poll_seconds: float,
     heartbeat_seconds: float,
