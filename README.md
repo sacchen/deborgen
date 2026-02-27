@@ -66,6 +66,8 @@ Then use:
 
 - [`architecture.md`](./architecture.md) for system model and state transitions
 - [`api.md`](./api.md) for HTTP contract details
+- [`docs/ops/deployment.md`](./docs/ops/deployment.md) for the validated v0 coordinator/worker operating model
+- [`roadmap.md`](./roadmap.md) for the current phased development plan
 
 ## Intent
 

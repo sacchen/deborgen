@@ -5,9 +5,11 @@ import os
 import secrets
 import sqlite3
 import threading
+from argparse import ArgumentParser, Namespace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
+import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
@@ -491,3 +493,15 @@ def create_app(db_path: str | None = None, lease_duration_seconds: int = 30) -> 
 
 
 app = create_app()
+
+
+def parse_args() -> Namespace:
+    parser = ArgumentParser(description="deborgen v0 coordinator")
+    parser.add_argument("--host", default="0.0.0.0", help="Host interface to bind")
+    parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    uvicorn.run("deborgen.coordinator.app:app", host=args.host, port=args.port)
