@@ -192,7 +192,8 @@ class SqliteJobStore:
         )
 
     def _get_job_row(self, job_pk: int) -> sqlite3.Row | None:
-        return self._conn.execute("SELECT * FROM jobs WHERE id = ?", (job_pk,)).fetchone()
+        row = self._conn.execute("SELECT * FROM jobs WHERE id = ?", (job_pk,)).fetchone()
+        return cast(sqlite3.Row | None, row)
 
     def create_job(self, request: JobCreateRequest) -> Job:
         now = to_iso(utcnow())
@@ -412,7 +413,9 @@ def require_auth(
 
 def create_app(db_path: str | None = None) -> FastAPI:
     app = FastAPI(title="deborgen")
-    resolved_db_path = db_path or os.getenv("DEBORGEN_DB_PATH", "deborgen.db")
+    resolved_db_path: str = (
+        db_path if db_path is not None else os.getenv("DEBORGEN_DB_PATH") or "deborgen.db"
+    )
     store = SqliteJobStore(db_path=resolved_db_path)
 
     @app.get("/health")
