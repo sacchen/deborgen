@@ -24,6 +24,12 @@ def test_worker_cli_help() -> None:
     assert "deborgen v0 worker agent" in result.stdout
 
 
+def test_list_jobs_cli_help() -> None:
+    result = run_help("deborgen-list-jobs")
+    assert result.returncode == 0
+    assert "List recent deborgen jobs" in result.stdout
+
+
 def test_submit_example_cli_help() -> None:
     result = run_help("deborgen-submit-example")
     assert result.returncode == 0
