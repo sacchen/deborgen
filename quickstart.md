@@ -135,7 +135,7 @@ This command polls until the job reaches a terminal state, then prints the job s
 
 Expected log output includes the worker hostname and working directory. That proves the command ran on the droplet rather than on your local machine.
 
-## 6. Practical Compute: Run A Small Real Job
+## 5. Practical Compute: Run A Small Real Job
 
 Once the first example works, submit a small compute task:
 

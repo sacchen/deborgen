@@ -7,6 +7,10 @@ from deborgen.cli.submit_example import EXAMPLE_COMMANDS, submit_example_job
 from deborgen.cli.watch_job import watch_job
 
 DEFAULT_SEQUENCE = ("hello", "primes")
+STEP_TITLES = {
+    "hello": "Step 1: prove where the job runs",
+    "primes": "Step 2: run a small practical compute job",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,6 +45,7 @@ def main() -> None:
     print("starting deborgen tutorial")
     for example in DEFAULT_SEQUENCE:
         print("")
+        print(STEP_TITLES[example])
         print(f"submitting example={example}")
         print(f"command={EXAMPLE_COMMANDS[example]}")
         job_id, _ = submit_example_job(
@@ -60,5 +65,15 @@ def main() -> None:
             include_logs=True,
         )
 
+    print("")
+    print("what you just verified:")
+    print("- your local machine can submit jobs to the coordinator")
+    print("- the droplet worker claims and runs those jobs")
+    print("- logs come back through the coordinator API")
+    print("")
+    print("next commands:")
+    print(f"- submit one example: uv run deborgen-submit-example hello --coordinator {coordinator}")
+    print(f"- submit one example: uv run deborgen-submit-example primes --coordinator {coordinator}")
+    print(f"- watch a job: uv run deborgen-watch-job <job_id> --coordinator {coordinator}")
     print("")
     print("tutorial complete")
