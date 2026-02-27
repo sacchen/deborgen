@@ -58,16 +58,11 @@ def build_job_request(example: str, timeout_seconds: int, max_attempts: int) -> 
 
 
 def print_follow_up(job_id: str, coordinator: str, token: str | None) -> None:
-    status_cmd = f"curl {coordinator}/jobs/{job_id}"
-    logs_cmd = f"curl {coordinator}/jobs/{job_id}/logs"
-    if token:
-        auth = ' -H "Authorization: Bearer $DEBORGEN_TOKEN"'
-        status_cmd += auth
-        logs_cmd += auth
-
     print(f"submitted {job_id}")
-    print(f"status: {status_cmd}")
-    print(f"logs:   {logs_cmd}")
+    watch_cmd = f"uv run deborgen-watch-job {job_id} --coordinator {coordinator}"
+    if token:
+        watch_cmd += " --token \"$DEBORGEN_TOKEN\""
+    print(f"watch: {watch_cmd}")
 
 
 def main() -> None:

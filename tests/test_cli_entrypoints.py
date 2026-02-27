@@ -28,3 +28,9 @@ def test_submit_example_cli_help() -> None:
     result = run_help("deborgen-submit-example")
     assert result.returncode == 0
     assert "Submit a built-in deborgen example job" in result.stdout
+
+
+def test_watch_job_cli_help() -> None:
+    result = run_help("deborgen-watch-job")
+    assert result.returncode == 0
+    assert "Watch a deborgen job until it reaches a terminal state" in result.stdout

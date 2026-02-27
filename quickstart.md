@@ -109,36 +109,18 @@ uv run deborgen-submit-example hello \
 
 Expected flow: the job enters `queued`, the droplet worker claims it, and the script runs on the droplet.
 
-The submit response includes a job id such as `job_1`. Keep that id for the next two steps.
+The submit helper prints the returned job id and a follow-up watch command. Run that next.
 
-## 4. Check Status
+## 4. Watch The Job Finish
 
-List jobs:
-
-```bash
-curl http://<coordinator-tailscale-ip>:8000/jobs \
-  -H "Authorization: Bearer $DEBORGEN_TOKEN"
-```
-
-Get one job:
+Run the watch command printed by the submit helper. It looks like this:
 
 ```bash
-curl http://<coordinator-tailscale-ip>:8000/jobs/<job_id> \
-  -H "Authorization: Bearer $DEBORGEN_TOKEN"
+uv run deborgen-watch-job job_1 \
+  --coordinator http://<coordinator-tailscale-ip>:8000
 ```
 
-Completed success state:
-
-```json
-{"status":"succeeded"}
-```
-
-## 5. Read Logs
-
-```bash
-curl http://<coordinator-tailscale-ip>:8000/jobs/<job_id>/logs \
-  -H "Authorization: Bearer $DEBORGEN_TOKEN"
-```
+This command polls until the job reaches a terminal state, then prints the job summary and logs.
 
 Expected log output includes the worker hostname and working directory. That proves the command ran on the droplet rather than on your local machine.
 
@@ -159,7 +141,7 @@ This job counts prime numbers and reports:
 
 The point is to show the obvious next step after “proof of execution”: use the same loop to run a real piece of compute work and get a useful result back quickly.
 
-Use the returned job id from this second submission with the same status and log commands from Steps 4 and 5.
+Use the watch command printed by the submit helper for this second job too.
 
 ## Adding More Workers Later
 
