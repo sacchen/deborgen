@@ -22,3 +22,9 @@ def test_worker_cli_help() -> None:
     result = run_help("deborgen-worker")
     assert result.returncode == 0
     assert "deborgen v0 worker agent" in result.stdout
+
+
+def test_submit_example_cli_help() -> None:
+    result = run_help("deborgen-submit-example")
+    assert result.returncode == 0
+    assert "Submit a built-in deborgen example job" in result.stdout

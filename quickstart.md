@@ -39,7 +39,9 @@ On the droplet:
 
 On your local machine:
 
-- `curl`
+- `uv` installed
+- repository cloned if you want to use the helper command below
+- dependencies installed with `uv sync`
 - network access to the coordinator over Tailscale
 - the same `DEBORGEN_TOKEN` used by the coordinator
 
@@ -98,13 +100,11 @@ Because the worker is running on the droplet in this tutorial, any job it claims
 
 ## 3. First Result: Prove Where The Job Runs
 
-From your local machine:
+From your local machine, in the project root:
 
 ```bash
-curl -X POST http://<coordinator-tailscale-ip>:8000/jobs \
-  -H "Authorization: Bearer $DEBORGEN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"command":"uv run python examples/01_hello_worker.py"}'
+uv run deborgen-submit-example hello \
+  --coordinator http://<coordinator-tailscale-ip>:8000
 ```
 
 Expected flow: the job enters `queued`, the droplet worker claims it, and the script runs on the droplet.
@@ -147,10 +147,8 @@ Expected log output includes the worker hostname and working directory. That pro
 Once the first example works, submit a small compute task:
 
 ```bash
-curl -X POST http://<coordinator-tailscale-ip>:8000/jobs \
-  -H "Authorization: Bearer $DEBORGEN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"command":"uv run python examples/02_count_primes.py"}'
+uv run deborgen-submit-example primes \
+  --coordinator http://<coordinator-tailscale-ip>:8000
 ```
 
 This job counts prime numbers and reports:
