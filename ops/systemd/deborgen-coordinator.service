@@ -8,12 +8,12 @@ Type=simple
 # Replace these values for the target host before installing.
 User=CHANGE_ME
 WorkingDirectory=/absolute/path/to/deborgen
-Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=/etc/deborgen/coordinator.env
 # Replace this with the absolute path to uv if it is not on the system service PATH.
-ExecStart=/absolute/path/to/uv run deborgen-coordinator
-Restart=on-failure
-RestartSec=5
+ExecStart=/absolute/path/to/uv run uvicorn deborgen.coordinator.app:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
