@@ -33,19 +33,25 @@ A worker is the machine running the `deborgen-worker` process. In later phases, 
 
 ## Coordinator Service
 
-Run the coordinator under `systemd` so it survives shell disconnects and reboots.
+Run the coordinator under `systemd` so it survives shell disconnects and reboots. This is the durable deployment path; use [`quickstart.md`](../../quickstart.md) only for manual/demo runs.
 
 Service command:
 
 ```bash
-uv run deborgen-coordinator
+uv run uvicorn deborgen.coordinator.app:app --host 0.0.0.0 --port 8000
 ```
 
 Use the checked-in service template at [`ops/systemd/deborgen-coordinator.service`](../../ops/systemd/deborgen-coordinator.service), then install it as `/etc/systemd/system/deborgen-coordinator.service`.
 
 Use the checked-in env template at [`ops/env/coordinator.env.example`](../../ops/env/coordinator.env.example), then install it as `/etc/deborgen/coordinator.env`.
 
-Before installing the service file, replace `User`, `WorkingDirectory`, and the `uv` path placeholders for the target host.
+Before installing the service file, replace `User`, `WorkingDirectory`, and the `uv` path placeholders for the target host. The validated service also uses:
+
+```ini
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+```
 
 Environment keys:
 

@@ -73,7 +73,7 @@ uv sync
 uv run deborgen-coordinator
 ```
 
-Keep this process running. Leave it in its own SSH session or terminal window.
+Keep this process running. Leave it in its own SSH session or terminal window. This is the fastest manual/demo path, not the durable production setup. For a persistent coordinator, use the `systemd` deployment in [`docs/ops/deployment.md`](./docs/ops/deployment.md).
 
 Health check:
 
