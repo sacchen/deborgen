@@ -9,6 +9,8 @@ from argparse import ArgumentParser, Namespace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
+import boto3
+from botocore.config import Config
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -56,12 +58,14 @@ class Job(BaseModel):
     exit_code: int | None = None
     failure_reason: str | None = None
     artifact_urls: list[str] = Field(default_factory=list)
+    requirements: dict[str, str | int | float | bool] = Field(default_factory=dict)
 
 
 class JobCreateRequest(BaseModel):
     command: str
     timeout_seconds: int = 3600
     max_attempts: int = 1
+    requirements: dict[str, str | int | float | bool] = Field(default_factory=dict)
 
 
 class JobAssignment(BaseModel):
@@ -88,6 +92,23 @@ class JobListResponse(BaseModel):
 
 class JobLogsResponse(BaseModel):
     text: str
+
+
+class JobArtifactPresignRequest(BaseModel):
+    node_id: str
+    lease_token: str
+    filename: str
+
+
+class JobArtifactPresignResponse(BaseModel):
+    upload_url: str
+    download_url: str
+
+
+class JobArtifactRecordRequest(BaseModel):
+    node_id: str
+    lease_token: str
+    url: str
 
 
 class Node(BaseModel):
@@ -129,10 +150,16 @@ class SqliteJobStore:
                     max_attempts INTEGER NOT NULL DEFAULT 1,
                     exit_code INTEGER,
                     failure_reason TEXT,
-                    artifact_urls TEXT NOT NULL DEFAULT '[]'
+                    artifact_urls TEXT NOT NULL DEFAULT '[]',
+                    requirements_json TEXT NOT NULL DEFAULT '{}'
                 )
                 """
             )
+            try:
+                self._conn.execute("ALTER TABLE jobs ADD COLUMN requirements_json TEXT NOT NULL DEFAULT '{}'")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS leases (
@@ -169,6 +196,8 @@ class SqliteJobStore:
     def _row_to_job(self, row: sqlite3.Row) -> Job:
         artifact_urls_raw = cast(str, row["artifact_urls"])
         artifact_urls = cast(list[str], json.loads(artifact_urls_raw))
+        requirements_raw = cast(str, row["requirements_json"] if "requirements_json" in row.keys() else "{}")
+        requirements = cast(dict[str, str | int | float | bool], json.loads(requirements_raw))
         return Job(
             id=f"job_{cast(int, row['id'])}",
             status=cast(JobStatus, row["status"]),
@@ -183,6 +212,7 @@ class SqliteJobStore:
             exit_code=cast(int | None, row["exit_code"]),
             failure_reason=cast(str | None, row["failure_reason"]),
             artifact_urls=artifact_urls,
+            requirements=requirements,
         )
 
     def _row_to_node(self, row: sqlite3.Row) -> Node:
@@ -206,10 +236,10 @@ class SqliteJobStore:
         with self._lock, self._conn:
             cursor = self._conn.execute(
                 """
-                INSERT INTO jobs(status, command, created_at, timeout_seconds, max_attempts, artifact_urls)
-                VALUES ('queued', ?, ?, ?, ?, '[]')
+                INSERT INTO jobs(status, command, created_at, timeout_seconds, max_attempts, artifact_urls, requirements_json)
+                VALUES ('queued', ?, ?, ?, ?, '[]', ?)
                 """,
-                (request.command, now, request.timeout_seconds, request.max_attempts),
+                (request.command, now, request.timeout_seconds, request.max_attempts, json.dumps(request.requirements)),
             )
             row = self._get_job_row(cast(int, cursor.lastrowid))
             if row is None:
@@ -245,18 +275,41 @@ class SqliteJobStore:
         lease_expires_at = to_iso(claimed_at + self._lease_duration)
         assert now is not None and lease_expires_at is not None
         with self._lock, self._conn:
-            queued = self._conn.execute(
+            # 1. Fetch node labels
+            node_row = self._conn.execute("SELECT labels_json FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
+            node_labels: dict[str, Any] = {}
+            if node_row is not None:
+                node_labels = json.loads(node_row["labels_json"])
+
+            # 2. Find matching job
+            queued_jobs = self._conn.execute(
                 """
-                SELECT * FROM jobs
+                SELECT id, requirements_json FROM jobs
                 WHERE status = 'queued' AND attempts < max_attempts
                 ORDER BY id ASC
-                LIMIT 1
                 """
-            ).fetchone()
-            if queued is None:
+            ).fetchall()
+
+            matched_job_pk = None
+            for row in queued_jobs:
+                # Handle old rows without requirements_json gracefully if they exist
+                reqs_raw = row["requirements_json"] if "requirements_json" in row.keys() else "{}"
+                reqs: dict[str, Any] = json.loads(reqs_raw)
+                
+                match = True
+                for k, v in reqs.items():
+                    if node_labels.get(k) != v:
+                        match = False
+                        break
+                
+                if match:
+                    matched_job_pk = cast(int, row["id"])
+                    break
+                    
+            if matched_job_pk is None:
                 return None
 
-            job_pk = cast(int, queued["id"])
+            job_pk = matched_job_pk
             updated = self._conn.execute(
                 """
                 UPDATE jobs
@@ -299,23 +352,6 @@ class SqliteJobStore:
             if cast(str, row["status"]) != "running":
                 raise HTTPException(status_code=409, detail="job is not running")
 
-            lease = self._conn.execute(
-                "SELECT node_id, lease_token, lease_expires_at FROM leases WHERE job_id = ?",
-                (job_pk,),
-            ).fetchone()
-            if lease is None:
-                raise HTTPException(status_code=409, detail="job has no active lease")
-
-            lease_node_id = cast(str, lease["node_id"])
-            lease_token = cast(str, lease["lease_token"])
-            lease_expires_at = parse_iso(cast(str, lease["lease_expires_at"]))
-            if lease_node_id != request.node_id or lease_token != request.lease_token:
-                raise HTTPException(status_code=409, detail="job is owned by a different worker")
-            if lease_expires_at is None:
-                raise HTTPException(status_code=409, detail="job has no active lease")
-            if utcnow() > lease_expires_at:
-                raise HTTPException(status_code=409, detail="lease has expired")
-
             next_status: JobStatus = "succeeded" if request.exit_code == 0 else "failed"
             self._conn.execute(
                 """
@@ -337,25 +373,6 @@ class SqliteJobStore:
         now = to_iso(utcnow())
         assert now is not None
         with self._lock, self._conn:
-            row = self._get_job_row(job_pk)
-            if row is None:
-                raise HTTPException(status_code=404, detail="job not found")
-            lease = self._conn.execute(
-                "SELECT node_id, lease_token, lease_expires_at FROM leases WHERE job_id = ?",
-                (job_pk,),
-            ).fetchone()
-            if lease is None:
-                raise HTTPException(status_code=409, detail="job has no active lease")
-            lease_node_id = cast(str, lease["node_id"])
-            lease_token = cast(str, lease["lease_token"])
-            lease_expires_at = parse_iso(cast(str, lease["lease_expires_at"]))
-            if lease_node_id != request.node_id or lease_token != request.lease_token:
-                raise HTTPException(status_code=409, detail="job is owned by a different worker")
-            if lease_expires_at is None:
-                raise HTTPException(status_code=409, detail="job has no active lease")
-            if utcnow() > lease_expires_at:
-                raise HTTPException(status_code=409, detail="lease has expired")
-
             self._conn.execute(
                 "INSERT INTO logs(job_id, text, created_at) VALUES (?, ?, ?)",
                 (job_pk, request.text, now),
@@ -373,6 +390,46 @@ class SqliteJobStore:
             ).fetchall()
             text = "".join(cast(str, record["text"]) for record in logs)
             return JobLogsResponse(text=text)
+
+    def assert_job_lease(self, job_id: str, node_id: str, lease_token: str) -> None:
+        job_pk = parse_job_pk(job_id)
+        with self._lock:
+            row = self._get_job_row(job_pk)
+            if row is None:
+                raise HTTPException(status_code=404, detail="job not found")
+            lease = self._conn.execute(
+                "SELECT node_id, lease_token, lease_expires_at FROM leases WHERE job_id = ?",
+                (job_pk,),
+            ).fetchone()
+            if lease is None:
+                raise HTTPException(status_code=409, detail="job has no active lease")
+            lease_node_id = cast(str, lease["node_id"])
+            lease_token_db = cast(str, lease["lease_token"])
+            lease_expires_at = parse_iso(cast(str, lease["lease_expires_at"]))
+            if lease_node_id != node_id or lease_token_db != lease_token:
+                raise HTTPException(status_code=409, detail="job is owned by a different worker")
+            if lease_expires_at is None:
+                raise HTTPException(status_code=409, detail="job has no active lease")
+            if utcnow() > lease_expires_at:
+                raise HTTPException(status_code=409, detail="lease has expired")
+
+    def record_artifact(self, job_id: str, url: str) -> None:
+        job_pk = parse_job_pk(job_id)
+        with self._lock, self._conn:
+            row = self._get_job_row(job_pk)
+            if row is None:
+                raise HTTPException(status_code=404, detail="job not found")
+            
+            # Fetch existing urls
+            artifact_urls_raw = cast(str, row["artifact_urls"])
+            artifact_urls = cast(list[str], json.loads(artifact_urls_raw))
+            if url not in artifact_urls:
+                artifact_urls.append(url)
+            
+            self._conn.execute(
+                "UPDATE jobs SET artifact_urls = ? WHERE id = ?",
+                (json.dumps(artifact_urls), job_pk)
+            )
 
     def heartbeat_node(self, node_id: str, request: NodeHeartbeatRequest) -> Node:
         now = to_iso(utcnow())
@@ -466,6 +523,7 @@ def create_app(db_path: str | None = None, lease_duration_seconds: int = 30) -> 
 
     @app.post("/jobs/{job_id}/finish", response_model=Job)
     def finish_job(job_id: str, request: JobFinishRequest, _: None = Depends(require_auth)) -> Job:
+        store.assert_job_lease(job_id, request.node_id, request.lease_token)
         return store.finish_job(job_id=job_id, request=request)
 
     @app.post("/nodes/{node_id}/heartbeat", response_model=Node)
@@ -482,12 +540,67 @@ def create_app(db_path: str | None = None, lease_duration_seconds: int = 30) -> 
         request: JobLogsRequest,
         _: None = Depends(require_auth),
     ) -> dict[str, str]:
+        store.assert_job_lease(job_id, request.node_id, request.lease_token)
         store.append_logs(job_id=job_id, request=request)
         return {"status": "ok"}
 
     @app.get("/jobs/{job_id}/logs", response_model=JobLogsResponse)
     def read_logs(job_id: str, _: None = Depends(require_auth)) -> JobLogsResponse:
         return store.read_logs(job_id=job_id)
+
+    @app.post("/jobs/{job_id}/artifacts/presign", response_model=JobArtifactPresignResponse)
+    def presign_artifact(
+        job_id: str,
+        request: JobArtifactPresignRequest,
+        _: None = Depends(require_auth),
+    ) -> JobArtifactPresignResponse:
+        store.assert_job_lease(job_id, request.node_id, request.lease_token)
+        
+        endpoint_url = os.getenv("S3_ENDPOINT_URL")
+        access_key = os.getenv("S3_ACCESS_KEY_ID")
+        secret_key = os.getenv("S3_SECRET_ACCESS_KEY")
+        bucket_name = os.getenv("S3_BUCKET_NAME")
+        
+        if not all([endpoint_url, access_key, secret_key, bucket_name]):
+            raise HTTPException(status_code=500, detail="S3 storage not configured")
+        
+        # We assume virtual hosting style might not be supported by all providers,
+        # but boto3 config can handle it if we set endpoint_url.
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=endpoint_url,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            config=Config(signature_version="s3v4")
+        )
+        
+        object_key = f"jobs/{job_id}/{request.filename}"
+        
+        try:
+            upload_url = s3_client.generate_presigned_url(
+                "put_object",
+                Params={"Bucket": bucket_name, "Key": object_key},
+                ExpiresIn=3600,
+            )
+            download_url = s3_client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket_name, "Key": object_key},
+                ExpiresIn=86400 * 7, # 7 days
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"failed to generate presigned URL: {e}")
+            
+        return JobArtifactPresignResponse(upload_url=upload_url, download_url=download_url)
+
+    @app.post("/jobs/{job_id}/artifacts")
+    def record_artifact(
+        job_id: str,
+        request: JobArtifactRecordRequest,
+        _: None = Depends(require_auth),
+    ) -> dict[str, str]:
+        store.assert_job_lease(job_id, request.node_id, request.lease_token)
+        store.record_artifact(job_id, request.url)
+        return {"status": "ok"}
 
     return app
 

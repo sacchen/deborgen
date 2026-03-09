@@ -10,6 +10,7 @@ dependencies = [
     "uvicorn[standard]>=0.27",
     "httpx>=0.27",
     "pydantic>=2.6",
+    "boto3>=1.42.63",
 ]
 
 [project.scripts]
@@ -52,3 +53,8 @@ no_implicit_optional = true
 warn_return_any = true
 warn_unused_ignores = true
 pretty = true
+
+[dependency-groups]
+dev = [
+    "boto3-stubs[essential]>=1.42.63",
+]
