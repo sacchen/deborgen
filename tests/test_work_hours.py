@@ -1,5 +1,4 @@
 from datetime import datetime
-import pytest
 
 from deborgen.worker.agent import is_within_work_hours
 
