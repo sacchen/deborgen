@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import platform
 import shlex
+import shutil
 import subprocess
+import tempfile
 import time
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -34,6 +40,11 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=15.0,
         help="Heartbeat interval",
+    )
+    parser.add_argument(
+        "--work-hours",
+        default=None,
+        help="Optional time window to accept jobs (e.g. '22:00-08:00' or '09:00-17:00')",
     )
     return parser.parse_args()
 
@@ -77,6 +88,15 @@ def parse_labels(labels_json: str) -> dict[str, LabelValue]:
         raise ValueError("--labels-json must decode to an object")
 
     labels: dict[str, LabelValue] = {}
+    
+    # Auto-detect labels
+    labels["os"] = platform.system().lower()
+    labels["arch"] = platform.machine().lower()
+    
+    cpu_cores = os.cpu_count()
+    if cpu_cores is not None:
+        labels["cpu_cores"] = cpu_cores
+
     for key, value in parsed.items():
         if not isinstance(key, str):
             raise ValueError("--labels-json keys must be strings")
@@ -98,6 +118,28 @@ def send_heartbeat(client: httpx.Client, node_id: str, name: str | None, labels:
     ).raise_for_status()
 
 
+def is_within_work_hours(now: datetime, work_hours_str: str | None) -> bool:
+    if not work_hours_str:
+        return True
+        
+    try:
+        start_str, end_str = work_hours_str.split("-")
+        start_time = datetime.strptime(start_str.strip(), "%H:%M").time()
+        end_time = datetime.strptime(end_str.strip(), "%H:%M").time()
+    except ValueError:
+        print(f"[worker] warning: invalid --work-hours format '{work_hours_str}'. Expected 'HH:MM-HH:MM'. Ignoring.")
+        return True
+        
+    current_time = now.time()
+    
+    if start_time < end_time:
+        # e.g., 09:00 - 17:00
+        return start_time <= current_time <= end_time
+    else:
+        # e.g., 22:00 - 08:00 (spans midnight)
+        return current_time >= start_time or current_time <= end_time
+
+
 def worker_loop(
     coordinator: str,
     node_id: str,
@@ -107,6 +149,7 @@ def worker_loop(
     poll_seconds: float,
     work_dir: str | None,
     heartbeat_seconds: float,
+    work_hours: str | None,
 ) -> None:
     headers: dict[str, str] = {}
     if token:
@@ -122,6 +165,10 @@ def worker_loop(
                 except httpx.HTTPError as exc:
                     print(f"[worker] heartbeat failed: {exc}")
                 next_heartbeat = now + heartbeat_seconds
+
+            if not is_within_work_hours(datetime.now(), work_hours):
+                time.sleep(poll_seconds)
+                continue
 
             try:
                 response = client.get("/jobs/next", params={"node_id": node_id})
@@ -148,24 +195,75 @@ def worker_loop(
             timeout_seconds = int(job.get("timeout_seconds", 3600))
             print(f"[worker] running {job_id}: {command}")
 
-            exit_code, log_text, failure_reason = run_job(
-                command=command,
-                timeout_seconds=timeout_seconds,
-                work_dir=work_dir,
-            )
+            with tempfile.TemporaryDirectory(dir=work_dir) as job_work_dir:
+                exit_code, log_text, failure_reason = run_job(
+                    command=command,
+                    timeout_seconds=timeout_seconds,
+                    work_dir=job_work_dir,
+                )
 
-            if log_text:
-                try:
-                    client.post(
-                        f"/jobs/{job_id}/logs",
-                        json={
-                            "node_id": node_id,
-                            "lease_token": lease_token,
-                            "text": log_text,
-                        },
-                    ).raise_for_status()
-                except httpx.HTTPError as exc:
-                    print(f"[worker] log upload failed for {job_id}: {exc}")
+                # Check for artifacts
+                artifacts_found = any(Path(job_work_dir).iterdir())
+                
+                if log_text:
+                    try:
+                        client.post(
+                            f"/jobs/{job_id}/logs",
+                            json={
+                                "node_id": node_id,
+                                "lease_token": lease_token,
+                                "text": log_text,
+                            },
+                        ).raise_for_status()
+                    except httpx.HTTPError as exc:
+                        print(f"[worker] log upload failed for {job_id}: {exc}")
+
+                if artifacts_found:
+                    try:
+                        zip_path = shutil.make_archive(
+                            base_name=os.path.join(tempfile.gettempdir(), f"{job_id}_artifacts"),
+                            format="zip",
+                            root_dir=job_work_dir,
+                        )
+                        
+                        presign_resp = client.post(
+                            f"/jobs/{job_id}/artifacts/presign",
+                            json={
+                                "node_id": node_id,
+                                "lease_token": lease_token,
+                                "filename": "artifacts.zip",
+                            },
+                        )
+                        presign_resp.raise_for_status()
+                        urls = presign_resp.json()
+                        upload_url = urls["upload_url"]
+                        download_url = urls["download_url"]
+                        
+                        # Upload to S3
+                        with open(zip_path, "rb") as f:
+                            # Use a separate client for the S3 upload to avoid sending our Bearer token
+                            upload_resp = httpx.put(upload_url, content=f, timeout=300.0)
+                            upload_resp.raise_for_status()
+                            
+                        # Record with coordinator
+                        client.post(
+                            f"/jobs/{job_id}/artifacts",
+                            json={
+                                "node_id": node_id,
+                                "lease_token": lease_token,
+                                "url": download_url,
+                            },
+                        ).raise_for_status()
+                        
+                        print(f"[worker] uploaded artifacts for {job_id}")
+                    except Exception as exc:
+                        print(f"[worker] artifact upload failed for {job_id}: {exc}")
+                    finally:
+                        try:
+                            if 'zip_path' in locals() and os.path.exists(zip_path):
+                                os.remove(zip_path)
+                        except Exception:
+                            pass
 
             try:
                 client.post(
@@ -194,6 +292,7 @@ def main() -> None:
         poll_seconds=args.poll_seconds,
         work_dir=args.work_dir,
         heartbeat_seconds=args.heartbeat_seconds,
+        work_hours=args.work_hours,
     )
 
 

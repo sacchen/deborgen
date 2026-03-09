@@ -43,7 +43,11 @@ v0 may use a single shared token. Role-specific tokens can be added later.
   "max_attempts": 1,
   "exit_code": null,
   "failure_reason": null,
-  "artifact_urls": []
+  "artifact_urls": [],
+  "requirements": {
+    "gpu": "rtx3060",
+    "os": "linux"
+  }
 }
 ```
 
@@ -56,13 +60,15 @@ v0 may use a single shared token. Role-specific tokens can be added later.
   "labels": {
     "gpu": "rtx3060",
     "cpu_cores": 12,
-    "ram_gb": 32
+    "ram_gb": 32,
+    "os": "linux",
+    "arch": "x86_64"
   },
   "last_seen_at": "2026-02-26T18:05:00Z"
 }
 ```
 
-Node registration may be implicit on first heartbeat in v0.
+Node registration may be implicit on first heartbeat in v0. Auto-detected hardware labels (`os`, `arch`, `cpu_cores`) are automatically submitted by workers.
 
 ## Endpoints
 
@@ -88,7 +94,10 @@ Request:
 {
   "command": "uv run python examples/demo.py",
   "timeout_seconds": 3600,
-  "max_attempts": 1
+  "max_attempts": 1,
+  "requirements": {
+    "gpu": "rtx3060"
+  }
 }
 ```
 
@@ -96,6 +105,7 @@ Request:
 
 - `timeout_seconds`: implementation-defined (for example `3600`)
 - `max_attempts`: `1`
+- `requirements`: `{}`
 
 Response: `201` with job object.
 
@@ -222,21 +232,52 @@ Or a URL:
 
 ### Artifacts
 
-`POST /jobs/{job_id}/artifacts`
+Upload artifact data via an S3 presigned URL flow.
 
-Upload artifact data (directly or via presigned URL flow). Coordinator must store artifact metadata.
+`POST /jobs/{job_id}/artifacts/presign`
 
-`GET /jobs/{job_id}/artifacts`
+Request:
+
+```json
+{
+  "node_id": "node_abc",
+  "lease_token": "lease_opaque_string",
+  "filename": "artifacts.zip"
+}
+```
 
 Response `200`:
 
 ```json
 {
-  "artifacts": [
-    { "name": "result.json", "url": "..." }
-  ]
+  "upload_url": "https://s3...",
+  "download_url": "https://s3..."
 }
 ```
+
+Workers upload directly to `upload_url` via HTTP PUT, then record the URL with the coordinator:
+
+`POST /jobs/{job_id}/artifacts`
+
+Request:
+
+```json
+{
+  "node_id": "node_abc",
+  "lease_token": "lease_opaque_string",
+  "url": "https://s3..."
+}
+```
+
+Response `200`:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+Artifacts are then visible on the Job object in `artifact_urls`.
 
 ## Errors
 

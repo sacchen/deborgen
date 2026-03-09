@@ -28,7 +28,9 @@ Jobs are transparent. Each job records who submitted it, where it ran, when it s
 
 ## Cooperative Model
 
-Participation is voluntary. Nodes may join or leave at any time. Execution windows can be limited to agreed work hours. Jobs are time-bounded and resource-limited.
+Participation is voluntary. Nodes may join or leave at any time. The system automatically detects heterogeneous hardware (OS, CPU cores) allowing jobs to be routed strictly to capable machines. 
+
+To ensure personal machines aren't disturbed during the day, execution windows can be limited to agreed work hours (e.g., `--work-hours "22:00-08:00"`).
 
 The system assumes a trusted group and emphasizes shared norms:
 
