@@ -8,7 +8,7 @@ The goal of v0 is a real end-to-end loop across two machines.
 
 A submitter can create a job, a worker can claim it, run it, upload logs, and report a terminal result. The coordinator remains small and exposes a minimal HTTP API. The state model stays simple: `queued` to `running` to `succeeded` or `failed`.
 
-This phase is mostly in place now. The coordinator, worker polling loop, authentication, logs, leases, and basic documentation already exist. The main remaining gap is to align the docs and implementation around artifacts: the docs describe them, but the current code does not fully implement artifact handling yet.
+This phase is complete. The coordinator, worker polling loop, authentication, logs, leases, label-based routing, work-hour scheduling, and S3 artifact storage are all implemented.
 
 ## Phase 1: Make It Reliable Enough To Use (v1: hardening and boring ops)
 
