@@ -25,6 +25,7 @@ and productive. Being stuck for 2 hours means ask for a hint.
 
 | Lab | Title | Language |
 |-----|-------|----------|
+| 00  | Run it and watch one job | none (observe) |
 | 01  | Phase A tests | Python |
 | 02  | Code reading: the coordinator | Python |
 | 03  | Go worker: heartbeat loop | Go |

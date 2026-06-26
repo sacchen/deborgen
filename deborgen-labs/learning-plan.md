@@ -95,6 +95,7 @@ Guide written at `deborgen-labs/go-guide.md`. Every Go concept is paired with th
 
 | Lab | Topic | State |
 |-----|-------|-------|
+| 00 | Run it and watch one job | Do this first — unblocks the mental model |
 | 01 | Phase A tests (Python) | In progress — blocked on pytest fixtures |
 | 02 | Code reading: the coordinator | Not started |
 | 03 | Go worker: heartbeat | Not started |

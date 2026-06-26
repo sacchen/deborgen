@@ -61,7 +61,7 @@ If friends are donating their personal gaming PCs to the cluster, the worker age
 
 ### The Solution: `--work-hours`
 We introduced a command-line flag to the worker agent: `--work-hours "22:00-08:00"`.
-1. **Time Boundaries:** The worker loop evaluates the current local time against this window.
+1. **Time Boundaries:** The worker loop evaluates the current local time against this window. A naive `start <= current <= end` check fails for overnight windows (e.g. 22:00–08:00). The fix: if `start > end` numerically, the window spans midnight, so valid times are either `>= start` OR `<= end`.
 2. **Resting State:** If the current time is outside the permitted window, the worker skips polling the queue for new jobs.
 3. **Persistent Heartbeats:** Crucially, even while "resting," the worker continues to send regular HTTP heartbeats to the coordinator.
 
